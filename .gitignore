@@ -1,0 +1,16 @@
+# Python-specific files
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# OS and IDE files
+.DS_Store
+.ipynb_checkpoints/
+.vscode/
+
+# Generated files
+/static/heatmap.png
+/honeywell_data.xlsx
+/Processed_Flight_Data

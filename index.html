@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Delay Analytics Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Flight Delay Analytics Dashboard</h1>
+        <p>Insights and interactive prediction for Honeywell flight data.</p>
+    </header>
+
+    <main>
+        <section class="insights">
+            <h2>Key Insights</h2>
+            <div class="insight-cards">
+                <div class="card">
+                    <h3>Best Time to Fly 🌅</h3>
+                    <p id="best-hour-text"></p>
+                </div>
+                <div class="card">
+                    <h3>Worst Time to Fly ⛈️</h3>
+                    <p id="worst-hour-text"></p>
+                </div>
+                <div class="card">
+                    <h3>Busiest Hours to Avoid 🚧</h3>
+                    <p id="busiest-hour-text"></p>
+                </div>
+                <div class="card">
+                    <h3>Flights with Biggest Cascading Impact ✈️💥</h3>
+                    <p id="cascading-flights-text"></p>
+                </div>
+            </div>
+        </section>
+
+        <section class="prediction-form">
+            <h2>Predict Flight Delay 🚀</h2>
+            <div class="form-container">
+                <div class="form-group">
+                    <label for="from-airport">From Airport:</label>
+                    <select id="from-airport" name="from_airport" required>
+                        {% for airport in unique_from %}
+                        <option value="{{ airport }}">{{ airport }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="to-airport">To Airport:</label>
+                    <select id="to-airport" name="to_airport" required>
+                        {% for airport in unique_to %}
+                        <option value="{{ airport }}">{{ airport }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="aircraft-type">Aircraft Type:</label>
+                    <select id="aircraft-type" name="aircraft_type" required>
+                        {% for aircraft in unique_aircraft %}
+                        <option value="{{ aircraft }}">{{ aircraft }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="scheduled-hour">Scheduled Hour (0-23):</label>
+                    <input type="number" id="scheduled-hour" name="scheduled_hour" min="0" max="23" value="12" required>
+                </div>
+                <button id="predict-button">Get Delay Prediction</button>
+            </div>
+            <div class="prediction-result" id="prediction-result">
+                <!-- Prediction results will be displayed here -->
+            </div>
+        </section>
+
+        <section class="visuals">
+            <h2>Visual Analysis</h2>
+            <div class="chart-container">
+                <canvas id="delay-chart"></canvas>
+            </div>
+            <div class="heatmap-container">
+                <h3>Average Departure Delay (Date vs. Hour)</h3>
+                <img id="heatmap-img" src="" alt="Heatmap of average delays">
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Flight Analytics.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Fetch Dashboard Data ---
+            fetch('/api/dashboard_data')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('best-hour-text').textContent = data.best_hour;
+                    document.getElementById('worst-hour-text').textContent = data.worst_hour;
+                    document.getElementById('busiest-hour-text').textContent = data.busiest_hours;
+                    document.getElementById('cascading-flights-text').textContent = data.cascading_flights;
+
+                    const labels = data.hour_stats.map(row => row.sched_hour);
+                    const delays = data.hour_stats.map(row => row.avg_dep_delay);
+                    
+                    const ctx = document.getElementById('delay-chart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Average Departure Delay (min)',
+                                data: delays,
+                                borderColor: 'rgb(75, 192, 192)',
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                tension: 0.1,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                },
+                                title: {
+                                    display: true,
+                                    text: 'Avg. Departure Delay by Scheduled Hour'
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Scheduled Hour'
+                                    }
+                                },
+                                y: {
+                                    title: {
+                                        display: true,
+                                        text: 'Average Delay (min)'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                })
+                .catch(error => console.error('Error fetching dashboard data:', error));
+
+            // --- Fetch and Display Heatmap Image ---
+            fetch('/api/heatmap_image')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.image_url) {
+                        // Add a cache buster to ensure the latest image is loaded
+                        document.getElementById('heatmap-img').src = data.image_url + '?' + new Date().getTime();
+                    } else {
+                        document.getElementById('heatmap-img').alt = "Error loading heatmap: " + (data.error || "Unknown error");
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching heatmap:', error);
+                    document.getElementById('heatmap-img').alt = "Error loading heatmap.";
+                });
+
+            // --- Handle Prediction Form Submission ---
+            const predictButton = document.getElementById('predict-button');
+            predictButton.addEventListener('click', () => {
+                const fromAirport = document.getElementById('from-airport').value;
+                const toAirport = document.getElementById('to-airport').value;
+                const aircraftType = document.getElementById('aircraft-type').value;
+                const scheduledHour = document.getElementById('scheduled-hour').value;
+                const predictionResultDiv = document.getElementById('prediction-result');
+
+                predictionResultDiv.innerHTML = '<p>Loading prediction...</p>';
+                predictionResultDiv.style.color = '#333';
+
+                fetch('/api/predict_delay', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        from_airport: fromAirport,
+                        to_airport: toAirport,
+                        aircraft_type: aircraftType,
+                        scheduled_hour: scheduledHour
+                    }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        predictionResultDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                    } else {
+                        let message = `Predicted departure delay for this flight: <strong>${data.predicted_delay_min} minutes</strong>.`;
+                        if (data.predicted_delay_min > 30) {
+                            message += `<br> <span style="color: orange; font-weight: bold;">Consider adjusting your schedule to avoid this significant delay.</span>`;
+                        } else if (data.predicted_delay_min < -10) {
+                            message += `<br> <span style="color: green; font-weight: bold;">This flight might depart early! Arrive promptly.</span>`;
+                        } else if (data.predicted_delay_min > 5) {
+                            message += `<br> <span style="color: #004d99;">A minor delay is possible.</span>`;
+                        } else {
+                            message += `<br> <span style="color: #004d99;">This flight is likely to be on time or depart slightly early.</span>`;
+                        }
+                        predictionResultDiv.innerHTML = `<p>${message}</p>`;
+                        predictionResultDiv.style.color = '#333';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during prediction:', error);
+                    predictionResultDiv.innerHTML = `<p style="color: red;">Failed to get prediction. Please try again.</p>`;
+                });
+            });
+        });
+    </script>
+</body>
+</html>
